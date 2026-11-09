@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Hair Preview Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:wght@600&display=swap">
+<style>
+  :root {
+    --bg: #09090b;
+    --surface: rgba(24, 24, 27, 0.7); 
+    --ink: #fafafa;
+    --mute: #a1a1aa;
+    --line: rgba(255, 255, 255, 0.1);
+    --accent: #d9a8dc; 
+    --accent-ink: #1a1320; 
+    --good: #7fd1ae;
+  }
+  
+  * { box-sizing: border-box; }
+  body { 
+    margin: 0; 
+    background-color: var(--bg); 
+    background-image: radial-gradient(circle at 50% 0%, rgba(217, 168, 220, 0.15) 0%, transparent 50%);
+    background-repeat: no-repeat;
+    color: var(--ink); 
+    font: 15px/1.5 "Inter", system-ui, sans-serif; 
+    min-height: 100vh;
+  }
+  
+  main { max-width: 1200px; margin: 0 auto; padding: 40px 20px 48px; }
+  h1 { font: 600 clamp(28px, 5vw, 42px)/1.1 Fraunces, Georgia, serif; margin: 0 0 8px; text-align: center; }
+  .lead { color: var(--mute); text-align: center; max-width: 65ch; margin: 0 auto 40px; font-size: 16px; }
+  
+  .panel { 
+    background: var(--surface); 
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--line); 
+    border-radius: 16px; 
+    padding: 24px; 
+    margin-bottom: 24px; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  
+  .setup { display: grid; gap: 24px; grid-template-columns: 240px 1fr; }
+  @media(max-width: 700px) { .setup { grid-template-columns: 1fr; } }
+  
+  .drop { 
+    aspect-ratio: 3/4; 
+    border: 2px dashed var(--line); 
+    border-radius: 12px; 
+    display: grid; 
+    place-items: center; 
+    text-align: center; 
+    color: var(--mute); 
+    cursor: pointer; 
+    overflow: hidden; 
+    position: relative; 
+    padding: 8px; 
+    transition: all 0.2s; 
+    background: rgba(0,0,0,0.2);
+  }
+  .drop:hover { border-color: var(--accent); color: var(--accent); }
+  .drop img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+  .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  
+  .drop.small { aspect-ratio: 1; border-radius: 8px; }
+  .drop.small img { object-position: 50% 50%; }
+
+  label.f { display: block; font-weight: 600; margin: 0 0 8px; font-size: 13px; color: var(--mute); text-transform: uppercase; letter-spacing: 0.5px; }
+  input[type=text], input[type=password], select { width: 100%; font: inherit; color: var(--ink); background: rgba(0,0,0,0.3); border: 1px solid var(--line); border-radius: 8px; padding: 12px; transition: border-color 0.2s; }
+  input[type=text]:focus, input[type=password]:focus, select:focus { outline: none; border-color: var(--accent); }
+  select optgroup { color: var(--mute); font-weight: bold; }
+  select option { color: var(--ink); background: #18181b; }
+  
+  .row { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  @media(max-width: 560px) { .row { grid-template-columns: 1fr; } }
+  
+  button { 
+    font: inherit; font-weight: 700; font-size: 15px;
+    background: #18181b; color: white; 
+    border: 1px solid rgba(217, 168, 220, 0.5); border-radius: 12px; 
+    padding: 16px 28px; cursor: pointer; 
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
+    position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 8px;
+  }
+  button::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(217, 168, 220, 0.1), rgba(217, 168, 220, 0.3), rgba(217, 168, 220, 0.1));
+    opacity: 0; transition: opacity 0.3s;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 0 20px rgba(217, 168, 220, 0.2); transform: translateY(-2px); }
+  button:hover:not(:disabled)::before { opacity: 1; }
+  button:disabled { border-color: var(--line); color: var(--mute); cursor: not-allowed; transform: none; box-shadow: none; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); box-shadow: none; font-weight: 500; padding: 12px 20px; }
+  button.ghost:hover { background: rgba(255,255,255,0.05); }
+
+  #loading { display: none; text-align: center; padding: 40px 20px; }
+  .spinner { width: 40px; height: 40px; border: 4px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 16px; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .board { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .card { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: rgba(0,0,0,0.3); transition: transform 0.2s, border-color 0.2s; }
+  .card:hover { border-color: rgba(217, 168, 220, 0.4); transform: translateY(-4px); }
+  
+  .pair { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
+  .pair figure { margin: 0; aspect-ratio: 3/4; position: relative; background: #000; }
+  .pair img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; display: block; }
+  .pair figcaption { position: absolute; left: 8px; bottom: 8px; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; font-weight: 600; text-transform: uppercase; padding: 4px 10px; border-radius: 99px; backdrop-filter: blur(4px); }
+  
+  .info { padding: 20px; }
+  .info h3 { margin: 0 0 8px; font-size: 18px; font-weight: 700; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 4px 10px; border: 1px solid currentColor; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px;}
+  .good { color: var(--good); }
+  
+  .note { font-size: 14px; color: var(--mute); line-height: 1.5; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+  
+  @media print {
+    body { background: #fff; color: #000; }
+    .noprint { display: none !important; }
+    .panel, .card { break-inside: avoid; border-color: #ccc; }
+    .board { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SECURE GATEWAY -->
+<div id="auth-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #09090b; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px;">
+  <div class="panel" style="width: 100%; max-width: 400px; text-align: center; border-color: rgba(217, 168, 220, 0.3);">
+    <h2 style="margin-bottom: 8px; color: white; font-family: Fraunces, serif;">Secure Access</h2>
+    <p class="note" style="margin-bottom: 24px;">Please enter the stylist access code to continue.</p>
+    <input type="password" id="auth-input" placeholder="••••" style="text-align: center; font-size: 24px; letter-spacing: 8px; margin-bottom: 16px; background: #000;">
+    <button id="auth-btn" style="width: 100%; justify-content: center;">Unlock Board</button>
+    <p id="auth-error" style="color: #ff4757; margin-top: 12px; font-size: 13px; display: none;">Incorrect PIN. Try again.</p>
+  </div>
+</div>
+
+<main>
+  <h1>AI Hair Preview Board</h1>
+  <p class="lead">Upload a client photo and choose a style to generate a stylist-ready consultation board.</p>
+
+  <section class="panel noprint">
+    <div class="setup">
+      <div>
+        <label class="f">Client photo</label>
+        <div class="drop" id="dropClient">
+          <span id="dropClientText">Tap to add client photo</span>
+          <input type="file" accept="image/*" id="fileClient" aria-label="Client photo">
+        </div>
+      </div>
+      <div>
+        <div class="row">
+          <div>
+            <label class="f" for="name">Client name</label>
+            <input type="text" id="name" placeholder="e.g. Sarah" value="Client">
+          </div>
+          <div>
+            <label class="f" for="colour">Hair colour</label>
+            <select id="colour">
+              <optgroup label="Black Family">
+                <option value="Jet Black">Jet Black</option>
+                <option value="Soft Brown-Black">Soft Brown-Black</option>
+                <option value="Blue-Black">Blue-Black</option>
+                <option value="Violet-Black">Violet-Black</option>
+              </optgroup>
+              <optgroup label="Brown Family">
+                <option value="Espresso">Espresso</option>
+                <option value="Dark Brown" selected>Dark Brown</option>
+                <option value="Medium Brown">Medium Brown</option>
+                <option value="Chestnut Brown">Chestnut Brown</option>
+                <option value="Chocolate Brown">Chocolate Brown</option>
+                <option value="Honey Brown">Honey Brown</option>
+                <option value="Ash Brown">Ash Brown</option>
+                <option value="Light Brown">Light Brown</option>
+              </optgroup>
+              <optgroup label="Blonde Family">
+                <option value="Dark Blonde">Dark Blonde</option>
+                <option value="Medium Blonde">Medium Blonde</option>
+                <option value="Honey Blonde">Honey Blonde</option>
+                <option value="Strawberry Blonde">Strawberry Blonde</option>
+                <option value="Ash Blonde">Ash Blonde</option>
+                <option value="Platinum Blonde">Platinum Blonde</option>
+                <option value="Champagne Blonde">Champagne Blonde</option>
+              </optgroup>
+              <optgroup label="Red Family">
+                <option value="Auburn">Auburn</option>
+                <option value="Copper">Copper</option>
+                <option value="Cayenne Copper">Cayenne Copper</option>
+                <option value="Burgundy">Burgundy</option>
+                <option value="Red Velvet">Red Velvet</option>
+                <option value="Natural Red">Natural Red</option>
+              </optgroup>
+              <optgroup label="Grey & White Family">
+                <option value="Silver Grey">Silver Grey</option>
+                <option value="Ash Gray">Ash Gray</option>
+                <option value="Salt and Pepper">Salt and Pepper</option>
+                <option value="Pure White">Pure White</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+        <label class="f" style="margin-top: 20px;">Choose a Hairstyle</label>
+        <select id="style" style="margin-bottom: 20px;">
+            <optgroup label="Short Haircuts">
+                <option value="Buzz Cut">Buzz Cut</option>
+                <option value="Classic Pixie Cut" selected>Classic Pixie Cut</option>
+                <option value="Bixie Cut">Bixie Cut</option>
+                <option value="Blunt Bob">Blunt Bob</option>
+                <option value="French Bob">French Bob</option>
+                <option value="Inverted / Stacked Bob">Inverted / Stacked Bob</option>
+                <option value="Textured Shag (Short)">Textured Shag (Short)</option>
+                <option value="Undercut">Undercut</option>
+            </optgroup>
+            <optgroup label="Medium Haircuts">
+                <option value="Lob (Long Bob)">Lob (Long Bob)</option>
+                <option value="Textured Shag (Mid-Length)">Textured Shag (Mid-Length)</option>
+                <option value="Face-Framing Layered Cut">Face-Framing Layered Cut</option>
+                <option value="U-Shaped Cut">U-Shaped Cut</option>
+                <option value="Sleek Blunt Lob">Sleek Blunt Lob</option>
+                <option value="Curly/Wavy Mid-Cut">Curly/Wavy Mid-Cut</option>
+            </optgroup>
+            <optgroup label="Long Haircuts">
+                <option value="Butterfly Cut">Butterfly Cut</option>
+                <option value="Classic Long Layers">Classic Long Layers</option>
+                <option value="Blunt Long Cut">Blunt Long Cut</option>
+                <option value="Curtain Bangs with Long Length">Curtain Bangs with Long Length</option>
+                <option value="Wispy-Ended Long Cut">Wispy-Ended Long Cut</option>
+                <option value="Tailbone or Waist-Length Cut">Tailbone or Waist-Length Cut</option>
+            </optgroup>
+        </select>
+        
+        <label class="f">Reference image (optional)</label>
+        <p class="note" style="margin-top: 0; margin-bottom: 12px;">If you upload a reference, we'll use that instead of the style above.</p>
+        <div class="drop small" id="dropRef" style="width: 80px; display: inline-block; vertical-align: top;">
+          <span style="font-size: 24px; color: var(--accent);">+</span>
+          <input type="file" accept="image/*" id="fileRef" aria-label="Reference style" multiple>
+        </div>
+        <div id="refPreview" style="display: inline-block; vertical-align: top;"></div>
+        
+        <div class="actions">
+          <button id="generateBtn" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path></svg>
+            Generate Board
+          </button>
+          <span id="statusText" class="note" style="align-self: center; margin: 0;"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <p class="note">AI is styling the hair and generating your board...</p>
+  </div>
+
+  <section class="panel" id="resultsSection" style="display: none;">
+    <h2 id="title" style="margin-bottom: 24px; font-size: 24px;">Comparison board</h2>
+    <div class="board" id="board"></div>
+    <div class="actions noprint">
+      <button id="print" class="ghost">Print / Save as PDF</button>
+    </div>
+  </section>
+</main>
+
+<script>
+// --- SECURITY GATEWAY (PRO METHOD) ---
+let activePin = sessionStorage.getItem('arabbika_pin') || ""; 
+
+const authModal = document.getElementById('auth-modal');
+const authInput = document.getElementById('auth-input');
+const authBtn = document.getElementById('auth-btn');
+
+if (activePin) {
+  authModal.style.display = 'none';
+}
+
+authBtn.addEventListener('click', () => {
+  const enteredPin = authInput.value.trim();
+  if (enteredPin) {
+    activePin = enteredPin;
+    sessionStorage.setItem('arabbika_pin', activePin);
+    authModal.style.display = 'none';
+  } else {
+    alert("Please enter a PIN.");
+  }
+});
+
+authInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') authBtn.click();
+});
+
+// --- APP LOGIC ---
+const IS_LOCAL = false; 
+const WORKER_URL = 'https://hair-preview-worker.ashanar-elance.workers.dev';
+
+let clientPhoto = null;
+let refPhotos = [];
+const $ = id => document.getElementById(id);
+
+// Upload handlers
+$("fileClient").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    clientPhoto = reader.result;
+    $("dropClient").insertAdjacentHTML("afterbegin", `<img src="${clientPhoto}" alt="Client">`);
+    $("dropClientText").style.display = "none";
+    checkReady();
+  };
+  reader.readAsDataURL(file);
+});
+
+$("fileRef").addEventListener("change", (e) => {
+  const files = Array.from(e.target.files);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      refPhotos.push(reader.result);
+      renderRefPreviews();
+      checkReady();
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
+function renderRefPreviews() {
+  const container = $("refPreview");
+  container.innerHTML = refPhotos.map((src, i) => `
+    <div style="display: inline-block; position: relative; margin-left: 8px; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line);">
+      <img src="${src}" style="width: 100%; height: 100%; object-fit: cover;">
+      <button onclick="removeRef(${i})" style="position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: white; border: 0; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; line-height: 1; box-shadow: none; padding: 0;">×</button>
+    </div>
+  `).join('');
+}
+
+window.removeRef = (index) => {
+  refPhotos.splice(index, 1);
+  renderRefPreviews();
+  checkReady();
+};
+
+function checkReady() {
+  $("generateBtn").disabled = !clientPhoto;
+  $("statusText").textContent = clientPhoto ? "Ready to generate." : "Upload a client photo to start.";
+}
+
+// Generation Logic
+$("generateBtn").addEventListener("click", async () => {
+  $("resultsSection").style.display = "none";
+  $("loading").style.display = "block";
+  $("generateBtn").disabled = true;
+  $("statusText").textContent = "Processing...";
+
+  try {
+    const colour = $("colour").value;
+    const clientName = $("name").value.trim() || "Client";
+    const chosenStyle = $("style").value;
+    
+    let referencesToUse = refPhotos.length > 0 ? [refPhotos[0]] : [chosenStyle];
+    
+    const response = await fetch(`${WORKER_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-access-pin': activePin 
+      },
+      body: JSON.stringify({
+        clientImage: clientPhoto,
+        references: referencesToUse,
+        colour: colour,
+        clientName: clientName
+      })
+    });
+
+    if (response.status === 401) {
+        // If the PIN is wrong, the Worker returns 401 Unauthorized
+        sessionStorage.removeItem('arabbika_pin');
+        alert("Incorrect PIN. Please refresh the page and try again.");
+        return;
+    }
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Worker error: ${response.status} - ${errText}`);
+    }
+
+    const data = await response.json();
+    renderBoard(data.results, colour, clientName);
+    
+  } catch (error) {
+    alert(`Generation failed:\n${error.message}`);
+  } finally {
+    $("loading").style.display = "none";
+    $("generateBtn").disabled = false;
+    $("statusText").textContent = "";
+  }
+});
+
+function renderBoard(results, colour, name) {
+  $("title").textContent = `Consultation Board for ${name}`;
+  $("resultsSection").style.display = "block";
+  
+  const boardHTML = results.map((res, i) => {
+    const styleNote = res.note || "AI-generated preview based on your reference image.";
+    
+    const isUploadedRef = res.refImage.startsWith('data:image');
+    const refDisplay = isUploadedRef 
+      ? `<img src="${res.refImage}" alt="Reference">`
+      : `<div style="display:flex; align-items:center; justify-content:center; height:100%; padding: 20px; text-align:center; background: rgba(255,255,255,0.02); color: var(--muted); font-size: 14px; font-weight: 600;">${res.styleName}</div>`;
+
+    return `
+      <article class="card">
+        <div class="pair">
+          <figure>
+            ${refDisplay}
+            <figcaption>Reference</figcaption>
+          </figure>
+          <figure>
+            <img src="${res.generatedImage}" alt="Generated">
+            <figcaption>${name} (${colour})</figcaption>
+          </figure>
+        </div>
+        <div class="info">
+          <h3>${i+1}. ${res.styleName}</h3>
+          <span class="tag good">Preview</span>
+          <p class="note">
+            <strong>Stylist Note:</strong> ${styleNote}
+          </p>
+        </div>
+      </article>
+    `;
+  }).join("");
+  
+  $("board").innerHTML = boardHTML;
+}
+
+$("print").addEventListener("click", () => { try { window.print(); } catch(e) {} });
+checkReady();
+</script>
+</body>
+</html>
